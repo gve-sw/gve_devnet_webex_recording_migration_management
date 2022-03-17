@@ -1,0 +1,233 @@
+<!-- Template page: offers three sections to visualize a 3 steps workflow.-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="The design system sponsored by Cisco Brand">
+    <meta name="image" content="http://cisco-ui.cisco.com/assets/img/uikit-1200x630%402x.png">
+    <meta itemprop="name" content="Cisco UI Kit">
+    <meta itemprop="description" content="The design system sponsored by Cisco Brand">
+    <meta itemprop="image" content="http://cisco-ui.cisco.com">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Cisco UI Kit">
+    <meta name="twitter:description" content="The design system sponsored by Cisco Brand">
+    <meta property="og:title" content="Cisco UI Kit">
+    <meta property="og:description" content="The design system sponsored by Cisco Brand">
+    <meta property="og:image" content="https://cisco-ui.cisco.com/assets/img/uikit-1200x630%402x.png">
+    <meta property="og:url" content="http://cisco-ui.cisco.com">
+    <meta property="og:site_name" content="Cisco UI Kit">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:type" content="website">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="application-name" content="Cisco UI Kit">
+    <meta name="msapplication-TileColor" content="#FFFFFF">
+    <meta name="msapplication-TileImage" content="img/mstile.png">
+    <meta name="msapplication-square70x70logo" content="img/mstile.png">
+    <meta name="msapplication-square150x150logo" content="img/mstile.png">
+    <meta name="msapplication-wide310x150logo" content="img/mstile.png">
+    <meta name="msapplication-square310x310logo" content="img/mstile.png">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <title>Webex Recording Migration Management</title>
+
+    <link rel="stylesheet" href="{{ url_for('static',filename='css/cui-standard.min.css') }}">
+</head>
+<body class="cui">
+    <nav class="header" id="styleguideheader" role="navigation">
+        <div class="container-fluid">
+            <div class="header-panels">
+                <div class="header-panel hidden-md-down">
+                    <a class="header__logo" href="http://www.cisco.com" target="_blank">
+                        <span class="icon-cisco"></span>
+                    </a>
+                    <h1 class="header__title">
+                        <span>Webex Recording Migration Management</span>
+                    </h1>
+                </div>
+                <div class="header-panel header-panel--center base-margin-left base-margin-right hidden-lg-up">
+                    <a class="header__logo" href="http://www.cisco.com" target="_blank">
+                        <span class="icon-cisco"></span>
+                    </a>
+                </div>
+                <div class="header-panel header-panel--right hidden-md-down">
+                    <a href="/scheduler" class="header-item">Scheduler</a>
+                    <a href="/" class="header-item" title="UI Kit Home"><span class="icon-home"></span></a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Body starts here-->
+    <div class="content content--alt" style = "text-align: center">
+        <div class="container-fluid">
+            <div class="row">
+                <!-- Left Rail -->
+                <div class="col-xl-3 col-md-4">
+                    <div class="section" >
+                        <div class="panel panel--loose panel--raised base-margin-bottom">
+                            <h2 class="subtitle">Step 1: Choose period of recordings </h2>
+                                <div class="section"> 
+                                        <form action="/select_period" method="POST" >
+                                            <div class="form-group base-margin-bottom">
+                                                <div class="form-group__text select">
+                                                        <select name="site" id='site' required>
+                                                            <option disabled selected hidden value="0">Please choose...</option>
+                                                            {% for site in sites %}<option value="{{site.siteUrl}}" {% if selected_site == site.siteUrl %} selected {% endif %}>{{site.siteUrl}}</option>{% endfor %}
+                                                        </select>
+                                                    <label for="site">Site*</label>
+                                                </div>
+                                            </div>
+                                            <div class="form-group base-margin-bottom">
+                                                <div class="form-group__text">
+                                                    <label for="input-type-date-from">From*
+                                                        <input id="input-type-date-from" type="date" value="2020-01-01" name="fromdate" required>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="form-group base-margin-bottom">
+                                                <div class="form-group__text">
+                                                    <input id="input-type-date-to" type="date" name="todate" required>
+                                                    <label for="input-type-date-to">To*</label>
+                                                </div>
+                                            </div>
+                                            <div class="form-group base-margin-bottom">
+                                                <div class="form-group__text select">
+                                                        <select name="person" id='person' required>
+                                                            <option disabled selected hidden value="0">Please choose...</option>
+                                                            {% for person in people %}<option value="{{person.id}}" {% if selected_person_id == person.id %} selected {% endif %}>{{person.firstName}} {{person.lastName}} ({{person.emails[0]}})</option>{% endfor %}
+                                                        </select>
+                                                    <label for="person">Person*</label>
+                                                </div>
+                                            </div>
+                                            <span class="required-label pull-right">* required fields</span>
+                                            <br>
+                                            <div class="flex-fluid" style="text-align: right;">
+                                                <input name="submit_button" class="btn btn-primary" type="submit" id="submit_period" value="Search" style="display:inline">
+                                            </div>
+                                        </form>
+                                </div> 
+                        </div>
+                    </div>
+                </div>
+        
+                <!-- Middle Rail -->
+                <div class="col-xl-6 col-md-4">
+                    <div class="section" {% if not meetings %} hidden {% endif %}>
+                        <div class="panel panel--loose panel--raised base-margin-bottom">
+                            <h2 class="subtitle">Step 2: Select recording(s)</h2>
+                            <div class="section">
+                                <form action="/select_recordings" method="POST" >
+                                <div class="responsive-table">
+                                    <table class="table table--lined table--selectable table">
+                                        <thead>
+                                            <tr>
+                                                <th>
+                                                    <label class="checkbox">
+                                                        <input type="checkbox" onClick="toggle(this)">
+                                                        <span class="checkbox__input"></span>
+                                                    </label>
+                                                </th>
+                                                <th class="sortable">Date <span class="sort-indicator icon-dropdown"></span></th>
+                                                <th class="text-center">Title</th>
+                                                <th class="text-center">In AWS cloud?</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for meeting in meetings %}
+                                                <tr>
+                                                    <td>
+                                                        <!-- If moved the cloud already, then checkbox is removed -->
+                                                        {% if not meeting["inAWSCloud"] %}
+                                                        <label class="checkbox">
+                                                            <input type="checkbox" name="meeting_id" value="{{meeting['id']}}">
+                                                            <span class="checkbox__input"></span>
+                                                        </label>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td class="sortable"> {{meeting['timeRecorded'].split('T')[0]}} </td>
+                                                    <td class="text-center"> {{meeting['topic']}} </td>
+                                                    <td class="text-center"> {{meeting["inAWSCloud"]}} </td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>                                                                    
+                            </div>   
+                        </div>            
+                    </div>
+                </div>
+        
+            <!-- Right Rail -->
+            <div class="col-xl-3 col-md-4">
+                <div class="section" {% if not meetings %} hidden {% endif %}>
+                    <div class="panel panel--loose panel--raised base-margin-bottom">
+                        <h2 class="subtitle">Step 3: Migrate selected recordings to AWS</h2> 
+                        <div class="flex-fluid" style="text-align: center;">
+                            <input name="submit_button" class="btn btn-primary" type="submit" value="Migrate" onclick="$('#loader_branch').show();">
+                        </div>  
+                    </form>  
+                    </div>
+                </div>
+                <div class="section" {% if not migrated_meetings %} hidden {% endif %}>
+                    <div class="panel panel--loose panel--raised base-margin-bottom">
+                        <h2 class="subtitle">Summary</h2>
+                        <form target="_blank" action={{s3_bucket_link}} {% if not migrated_meetings %} hidden {% endif %}}>
+                            <div class="flex-fluid" style="text-align: center;">
+                                <input name="view_bucket" class="btn btn-primary" type="submit" value="View AWS S3 Bucket" onclick="$('#loader_branch').show();">
+                            </div> 
+                        </form> 
+                        <br>
+                        {% for meeting in migrated_meetings %}
+                        <div class="toast base-margin-bottom">
+                            <div class="toast__icon text-success icon-check-outline"></div>
+                            <div class="toast__body">
+                                <div class="toast__title">Successful Migration</div>
+                                <div class="toast__message">We have successfully migrated and deleted the recording with the title: {{ meeting["topic"] }} </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% for meeting in failed_migrations %}
+                        <div class="toast base-margin-bottom">
+                            <div class="toast__icon text-danger icon-error-outline"></div>
+                            <div class="toast__body">
+                                <div class="toast__title">Unsuccessful Migration</div>
+                                <div class="toast__message">We have failed to migrate the recording with the title: {{ meeting["topic"] }} </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+        <footer class="footer">
+            <div class="footer__links">
+                <ul class="list list--inline">
+                    <li><a href="http://www.cisco.com/cisco/web/siteassets/contacts/index.html" target="_blank">Contacts</a></li>
+                    <li><a href="https://secure.opinionlab.com/ccc01/o.asp?id=jBjOhqOJ" target="_blank">Feedback</a></li>
+                    <li><a href="https://www.cisco.com/c/en/us/about/help.html" target="_blank">Help</a></li>
+
+                    <li><a href="https://www.cisco.com/c/en/us/about/legal/terms-conditions.html" target="_blank">Terms & Conditions</a></li></li>
+                    <li><a href="https://www.cisco.com/c/en/us/about/legal/privacy-full.html" target="_blank">Privacy Statement</a></li>
+                    <li><a href="https://www.cisco.com/c/en/us/about/legal/privacy-full.html#cookies" target="_blank">Cookie Policy</a></li>
+                    <li><a href="https://www.cisco.com/c/en/us/about/legal/trademarks.html" target="_blank">Trademarks</a></li>
+                </ul>
+            </div>
+        </footer>
+    </div>
+
+</body>
+</html>
+
+<script>
+function toggle(source) {
+  checkboxes = document.getElementsByName('meeting_id');
+  for(var i=0, n=checkboxes.length;i<n;i++) {
+    checkboxes[i].checked = source.checked;
+  }
+}
+</script>
