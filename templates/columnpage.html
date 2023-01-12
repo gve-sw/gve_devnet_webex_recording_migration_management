@@ -98,9 +98,10 @@
                                                 <div class="form-group__text select">
                                                         <select name="person" id='person' required>
                                                             <option disabled selected hidden value="0">Please choose...</option>
+                                                            <option value="all">All Users</option>
                                                             {% for person in people %}<option value="{{person.id}}" {% if selected_person_id == person.id %} selected {% endif %}>{{person.firstName}} {{person.lastName}} ({{person.emails[0]}})</option>{% endfor %}
                                                         </select>
-                                                    <label for="person">Person*</label>
+                                                    <label for="person">Person</label>
                                                 </div>
                                             </div>
                                             <span class="required-label pull-right">* required fields</span>
@@ -108,7 +109,7 @@
                                             <div class="flex-fluid" style="text-align: right;">
                                                 <input name="submit_button" class="btn btn-primary" type="submit" id="submit_period" value="Search" style="display:inline">
                                             </div>
-                                        </form>
+                                      </form>
                                 </div> 
                         </div>
                     </div>
@@ -133,15 +134,15 @@
                                                 </th>
                                                 <th class="sortable">Date <span class="sort-indicator icon-dropdown"></span></th>
                                                 <th class="text-center">Title</th>
-                                                <th class="text-center">In AWS cloud?</th>
+                                                <th class="text-center">In Storage?</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {% for meeting in meetings %}
                                                 <tr>
                                                     <td>
-                                                        <!-- If moved the cloud already, then checkbox is removed -->
-                                                        {% if not meeting["inAWSCloud"] %}
+                                                        <!-- If moved the storage already, then checkbox is removed -->
+                                                        {% if not meeting["inStorage"] %}
                                                         <label class="checkbox">
                                                             <input type="checkbox" name="meeting_id" value="{{meeting['id']}}">
                                                             <span class="checkbox__input"></span>
@@ -150,7 +151,7 @@
                                                     </td>
                                                     <td class="sortable"> {{meeting['timeRecorded'].split('T')[0]}} </td>
                                                     <td class="text-center"> {{meeting['topic']}} </td>
-                                                    <td class="text-center"> {{meeting["inAWSCloud"]}} </td>
+                                                    <td class="text-center"> {{meeting["inStorage"]}} </td>
                                                 </tr>
                                             {% endfor %}
                                         </tbody>
@@ -165,9 +166,9 @@
             <div class="col-xl-3 col-md-4">
                 <div class="section" {% if not meetings %} hidden {% endif %}>
                     <div class="panel panel--loose panel--raised base-margin-bottom">
-                        <h2 class="subtitle">Step 3: Migrate selected recordings to AWS</h2> 
+                        <h2 class="subtitle">Step 3: {{Action}} selected recordings to {{Destination}} Storage</h2> 
                         <div class="flex-fluid" style="text-align: center;">
-                            <input name="submit_button" class="btn btn-primary" type="submit" value="Migrate" onclick="$('#loader_branch').show();">
+                            <input name="submit_button" class="btn btn-primary" type="submit" value="{{Action}}" onclick="$('#loader_branch').show();">
                         </div>  
                     </form>  
                     </div>
@@ -177,7 +178,7 @@
                         <h2 class="subtitle">Summary</h2>
                         <form target="_blank" action={{s3_bucket_link}} {% if not migrated_meetings %} hidden {% endif %}}>
                             <div class="flex-fluid" style="text-align: center;">
-                                <input name="view_bucket" class="btn btn-primary" type="submit" value="View AWS S3 Bucket" onclick="$('#loader_branch').show();">
+                                <input name="view_bucket" class="btn btn-primary" type="submit" value="View {{Destination}} Bucket/Folder" onclick="$('#loader_branch').show();">
                             </div> 
                         </form> 
                         <br>
@@ -185,8 +186,8 @@
                         <div class="toast base-margin-bottom">
                             <div class="toast__icon text-success icon-check-outline"></div>
                             <div class="toast__body">
-                                <div class="toast__title">Successful Migration</div>
-                                <div class="toast__message">We have successfully migrated and deleted the recording with the title: {{ meeting["topic"] }} </div>
+                                <div class="toast__title">Successful {% if Action=='Migrate' %}Migration{% else %}Copy{% endif %}</div>
+                                <div class="toast__message">{{ meeting["topic"] }}</div>
                             </div>
                         </div>
                         {% endfor %}

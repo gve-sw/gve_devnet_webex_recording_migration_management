@@ -18,7 +18,10 @@ __author__ = "Simon Fang <sifang@cisco.com>"
 __copyright__ = "Copyright (c) 2022 Cisco and/or its affiliates."
 __license__ = "Cisco Sample Code License, Version 1.1"
 
-import requests, urllib
+import requests
+import urllib
+import glob
+
 
 from flask import Flask, request, redirect, render_template
 from boto3 import resource
@@ -37,7 +40,7 @@ load_dotenv()
 
 # Webex integration credentials
 webex_integration_client_id = os.getenv("webex_integration_client_id")
-webex_integration_client_secret= os.getenv("webex_integration_client_secret")
+webex_integration_client_secret = os.getenv("webex_integration_client_secret")
 webex_integration_redirect_uri = os.getenv("webex_integration_redirect_uri")
 webex_integration_scope = os.getenv("webex_integration_scope")
 
@@ -47,14 +50,18 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 REGION_NAME = os.getenv("REGION_NAME")
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
+DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER")
+MIGRATE_RECORDINGS = os.getenv("MIGRATE_RECORDINGS")
+
 # Flask app
 app = Flask(__name__)
 
-s3 = resource(
-    's3',
-    aws_access_key_id     = AWS_ACCESS_KEY_ID,
-    aws_secret_access_key = AWS_SECRET_ACCESS_KEY,
-    region_name           = REGION_NAME
+if (AWS_ACCESS_KEY_ID != ""):
+    s3 = resource(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=REGION_NAME
     )
 
 sites = []
@@ -68,6 +75,8 @@ selected_person_id = ""
 ########################
 
 # Get Webex Access Token
+
+
 def get_webex_access_token(webex_code):
     headers_token = {
         "Content-type": "application/x-www-form-urlencoded"
@@ -79,17 +88,20 @@ def get_webex_access_token(webex_code):
         'grant_type': 'authorization_code',
         'client_secret': webex_integration_client_secret
     }
-    get_token = requests.post(WEBEX_BASE_URL + "/access_token?", headers=headers_token, data=body)
+    get_token = requests.post(
+        WEBEX_BASE_URL + "/access_token?", headers=headers_token, data=body)
 
     webex_access_token = get_token.json()['access_token']
     return webex_access_token
 
 # Get all the sites
+
+
 def get_sites():
     # Get site URLs
     url = f"{WEBEX_BASE_URL}/meetingPreferences/sites"
     headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+        "Authorization": f"Bearer {webex_access_token}"
     }
 
     response = requests.get(url, headers=headers)
@@ -98,75 +110,104 @@ def get_sites():
     return sites
 
 # Get all the meetings from a selected period, site and specific user in your organization
+
+
 def get_meetings(from_date, to_date, selected_site, host_email):
     # Get recordings
     url = f"{WEBEX_BASE_URL}/recordings?from={from_date}T00%3A00%3A00&to={to_date}T23%3A59%3A59&siteUrl={selected_site}&hostEmail={host_email}"
     headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+        "Authorization": f"Bearer {webex_access_token}"
     }
 
     response = requests.get(url, headers=headers)
-    response.raise_for_status()
+    if (response.status_code == 401):
+        print('Unauthorized!')
+        return []
+    else:
+        response.raise_for_status()
     meetings = response.json()['items']
     return meetings
 
-# Function to return recordings stored in the AWS S3 bucket
-def get_aws_recordings():
-    aws_recordings = []
-    for bucket_obj in s3.Bucket(BUCKET_NAME).objects.all():
-        # Format of aws_recordings name: 'topic---id.mp4'
-        # Extract ID from title of recording
-        try:
-            aws_recordings.append((bucket_obj.key.split('.')[0]).split('---')[1])
-        except:
-            app.logger.info(f"Found a recording in AWS in the wrong format: {bucket_obj.key}")
+# Function to return recordings stored in the AWS S3 bucket or local folder
 
-    return aws_recordings
+
+def get_stored_recordings():
+    stored_recordings = []
+    if (AWS_ACCESS_KEY_ID != ""):
+        for bucket_obj in s3.Bucket(BUCKET_NAME).objects.all():
+            # Format of stored_recordings name: 'topic---id.mp4'
+            # Extract ID from title of recording
+            try:
+                stored_recordings.append(
+                    (bucket_obj.key.split('.')[0]).split('---')[1])
+            except:
+                app.logger.info(
+                    f"Found a recording in AWS in the wrong format: {bucket_obj.key}")
+    elif (DOWNLOAD_FOLDER != ""):
+        for file in glob.glob(DOWNLOAD_FOLDER+"*.mp4"):
+            # Format of stored_recordings name: 'topic---id.mp4'
+            # Extract ID from filename of recording
+            try:
+                stored_recordings.append(
+                    (file.split('.')[0]).split('---')[1])
+            except:
+                app.logger.info(
+                    f"Found a recording in local storage in the wrong format: {file}")
+    return stored_recordings
 
 # Function to check whether a meetings has been migrated to AWS already or not
-def are_meetings_in_aws_cloud(meetings, aws_recordings):
+
+
+def are_meetings_in_storage(meetings, stored_recordings):
     for meeting in meetings:
         # Check if meeting has been migrated to AWS already or not
-        if meeting["id"] in aws_recordings:
-            meeting["inAWSCloud"] = True
+        if meeting["id"] in stored_recordings:
+            meeting["inStorage"] = True
         else:
-            meeting["inAWSCloud"] = False
+            meeting["inStorage"] = False
     return meetings
 
 # Get all the people in your organization
+
+
 def get_people(webex_access_token):
     # Get people
     url = f"{WEBEX_BASE_URL}/people"
     headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+        "Authorization": f"Bearer {webex_access_token}"
     }
 
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     people = response.json()['items']
     return people
-    
+
 # Get the host email from the people details
+
+
 def get_host_email(person_id):
     # Get people details
     url = f"{WEBEX_BASE_URL}/people/{person_id}"
     headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+        "Authorization": f"Bearer {webex_access_token}"
     }
 
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    print("get host email")
-    print(response.json())
+    # print("get host email")
+    # print(response.json())
     emails = response.json()["emails"]
+    print(f'Got host email: {emails}')
     return emails
 
 # Delete a specific webex recording based on the recording ID
+
+
 def delete_webex_recordings(recording_id, host_email):
     # Delete recording
     url = f"{WEBEX_BASE_URL}/recordings/{recording_id}?hostEmail={host_email}"
     headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+        "Authorization": f"Bearer {webex_access_token}"
     }
 
     response = requests.delete(url, headers=headers)
@@ -175,11 +216,13 @@ def delete_webex_recordings(recording_id, host_email):
     return response
 
 # Get the recording details based on a meeting_id
+
+
 def get_recording_details(meeting, selected_person_id):
     # Get recording details
     url = f"{WEBEX_BASE_URL}/recordings/{meeting}?hostEmail={get_host_email(selected_person_id)[0]}"
-    response = requests.get(url, headers = {
-        "Authorization" : f"Bearer {webex_access_token}"
+    response = requests.get(url, headers={
+        "Authorization": f"Bearer {webex_access_token}"
     })
     return response.json()
 
@@ -188,19 +231,25 @@ def get_recording_details(meeting, selected_person_id):
 ##############
 
 # login page
+
+
 @app.route('/')
 def mainpage():
     return render_template('mainpage_login.html')
 
 # scheduler page
+
+
 @app.route('/scheduler')
 def scheduler_page():
     global webex_access_token
     sites = get_sites()
-    people =  get_people(webex_access_token)
+    people = get_people(webex_access_token)
     return render_template('scheduler.html', sites=sites, people=people)
 
 # webex access token
+
+
 @app.route('/webexlogin', methods=['POST'])
 def webexlogin():
     WEBEX_USER_AUTH_URL = WEBEX_BASE_URL + "/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&response_mode=query&scope={scope}".format(
@@ -212,6 +261,8 @@ def webexlogin():
     return redirect(WEBEX_USER_AUTH_URL)
 
 # Main page of the app
+
+
 @app.route('/webexoauth', methods=['GET'])
 def webexoauth():
     global sites
@@ -222,17 +273,22 @@ def webexoauth():
     webex_access_token = get_webex_access_token(webex_code)
 
     sites = get_sites()
-    people =  get_people(webex_access_token)
-
-    return render_template('columnpage.html', sites=sites, people=people)
+    people = get_people(webex_access_token)
+    return render_template('columnpage.html', sites=sites, people=people,
+                           Action="Migrate" if (
+                               MIGRATE_RECORDINGS == "True") else "Copy",
+                           Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
 
 # Step 1: select period of recordings
+
+
 @app.route('/select_period', methods=['POST', 'GET'])
 def select_period():
     global sites
     global selected_site
     global selected_person_id
     global meetings
+    global people
 
     if request.method == 'POST':
         form_data = request.form
@@ -242,21 +298,34 @@ def select_period():
         to_date = form_data['todate']
         selected_site = form_data['site']
         selected_person_id = form_data['person']
-        host_email = get_host_email(selected_person_id)[0]
-
-        meetings = get_meetings(from_date, to_date, selected_site, host_email)
+        print(f'Selected person ID: {selected_person_id}')
+        if selected_person_id != 'all':
+            host_email = get_host_email(selected_person_id)[0]
+            meetings = get_meetings(
+                from_date, to_date, selected_site, host_email)
+        else:
+            for person in people:
+                selected_person_id = person['id']
+                print(f'Listing recordings for: {selected_person_id}')
+                host_email = get_host_email(selected_person_id)[0]
+                meetings += get_meetings(from_date,
+                                         to_date, selected_site, host_email)
 
         app.logger.info("Successfully retrieved the list of recordings")
+        print("Successfully retrieved the list of recordings")
+        # Get recordings in storage
+        stored_recordings = get_stored_recordings()
 
-        # Get recordings in AWS
-        aws_recordings = get_aws_recordings()
-
-        meetings = are_meetings_in_aws_cloud(meetings, aws_recordings)
-
-        return render_template('columnpage.html', sites=sites, selected_site = selected_site, meetings = meetings, people=people, selected_person_id=selected_person_id)
+        meetings = are_meetings_in_storage(meetings, stored_recordings)
+        return render_template('columnpage.html', sites=sites, selected_site=selected_site, meetings=meetings, people=people, selected_person_id=selected_person_id,
+                               Action="Migrate" if (
+                                   MIGRATE_RECORDINGS == "True") else "Copy",
+                               Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
     return render_template('columnpage.html')
 
 # Step 2: Select recordings to migrate from Webex to AWS
+
+
 @app.route('/select_recordings', methods=['POST', 'GET'])
 def select_recordings():
     global sites
@@ -277,25 +346,38 @@ def select_recordings():
 
             for meeting in meetings_to_migrate:
                 try:
-                    recording_details = get_recording_details(meeting, selected_person_id)
+                    recording_details = get_recording_details(
+                        meeting, selected_person_id)
 
-                    app.logger.info(f"Downloading recording with meeting ID: {meeting}")
+                    app.logger.info(
+                        f"Downloading recording with meeting ID: {meeting}")
 
                     # Download recording mp4 in memory
                     downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
                     topic = recording_details['topic']
                     downloaded_file = urllib.request.urlopen(downloadlink)
 
-                    # We downloaded the file in memory and pass that on to S3 immediately
-                    s3.Bucket(BUCKET_NAME).put_object(Key=f'{topic}---{meeting}.mp4', Body=downloaded_file.read())
+                    if (AWS_ACCESS_KEY_ID != ""):
+                        # We downloaded the file in memory and pass that on to S3 immediately
+                        s3.Bucket(BUCKET_NAME).put_object(
+                            Key=f'{topic}---{meeting}.mp4', Body=downloaded_file.read())
+                    elif (DOWNLOAD_FOLDER != ""):
+                        downloaded_file = urllib.request.urlopen(downloadlink)
+                        save_as = DOWNLOAD_FOLDER+f'{topic}---{meeting}.mp4'
+                        content = downloaded_file.read()
+                        # Save to file
+                        with open(save_as, 'wb') as download:
+                            download.write(content)
+
                 except:
-                    app.logger.exception(f"Failed migration of recording with meeting id {meeting}")
+                    app.logger.exception(
+                        f"Failed copying of recording with meeting id {meeting}")
                     failed_migration_IDs.append(meeting)
 
         # Get recordings in AWS
-        aws_recordings = get_aws_recordings()
+        stored_recordings = get_stored_recordings()
 
-        meetings = are_meetings_in_aws_cloud(meetings, aws_recordings)
+        meetings = are_meetings_in_storage(meetings, stored_recordings)
 
         failed_migrations = []
         for failed_migration_ID in failed_migration_IDs:
@@ -312,15 +394,25 @@ def select_recordings():
                 if migrated_meeting_id == meeting["id"]:
                     migrated_meetings.append(meeting)
 
-        # Delete recordings from the Webex cloud
-        for meeting in migrated_meetings:
-            if delete_webex_recordings(meeting["id"], get_host_email(selected_person_id)[0]).ok:
-                app.logger.info(f"Successfully deleted meeting with meeting id {meeting['id']}")
+        if (MIGRATE_RECORDINGS == "True"):
+            # Delete recordings from the Webex cloud
+            for meeting in migrated_meetings:
+                if delete_webex_recordings(meeting["id"], get_host_email(selected_person_id)[0]).ok:
+                    app.logger.info(
+                        f"Successfully deleted meeting with meeting id {meeting['id']}")
 
-        s3_bucket_link = f"https://s3.console.aws.amazon.com/s3/buckets/{BUCKET_NAME}?region={REGION_NAME}&tab=objects"
+        if (AWS_ACCESS_KEY_ID != ""):
+            s3_bucket_link = f"https://s3.console.aws.amazon.com/s3/buckets/{BUCKET_NAME}?region={REGION_NAME}&tab=objects"
+        else:
+            s3_bucket_link = f"file://{DOWNLOAD_FOLDER}"
 
-        return render_template('columnpage.html', sites=sites, selected_site = selected_site, meetings = meetings, migrated_meetings=migrated_meetings, failed_migrations=failed_migrations, s3_bucket_link=s3_bucket_link, people=people, selected_person_id=selected_person_id)
+        return render_template('columnpage.html', sites=sites, selected_site=selected_site, meetings=meetings, migrated_meetings=migrated_meetings,
+                               failed_migrations=failed_migrations, s3_bucket_link=s3_bucket_link, people=people, selected_person_id=selected_person_id,
+                               Action="Migrate" if (
+                                   MIGRATE_RECORDINGS == "True") else "Copy",
+                               Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
     return render_template('columnpage.html')
 
+
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=False, port=5500)
