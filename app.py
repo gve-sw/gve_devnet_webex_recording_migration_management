@@ -27,6 +27,8 @@ from flask import Flask, request, redirect, render_template
 from boto3 import resource
 from dotenv import load_dotenv
 import os
+from webexteamssdk import WebexTeamsAPI
+import json
 
 
 ########################
@@ -172,14 +174,14 @@ def are_meetings_in_storage(meetings, stored_recordings):
 
 def get_people(webex_access_token):
     # Get people
-    url = f"{WEBEX_BASE_URL}/people"
-    headers = {
-        "Authorization": f"Bearer {webex_access_token}"
-    }
 
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    people = response.json()['items']
+    api = WebexTeamsAPI(access_token=webex_access_token)
+    people = []
+    peopleiterable = api.people.list()
+    for person in peopleiterable:
+        people.append(json.loads(json.dumps(person.json_data)))
+    print(people)
+
     return people
 
 # Get the host email from the people details
