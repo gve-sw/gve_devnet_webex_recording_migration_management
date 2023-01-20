@@ -1,6 +1,6 @@
 # GVE DevNet Webex Recording Migration Management
 
-Please note: this repository is an adaptation of the [Webex Recordings to AWS App](https://github.com/gve-sw/gve_devnet_webex_recordings_to_aws). We have extended the code for the admin user, so the admin user can migrate all the recordings to a cloud storage solution and delete the recordings from the Webex cloud.
+Please note: this repository is an adaptation of the [Webex Recordings to AWS App](https://github.com/gve-sw/gve_devnet_webex_recordings_to_aws). We have extended the code for the admin user, so the admin user can migrate or copy all the recordings to a cloud storage solution or local storage. We have also implemented a "bulk" mode to be able to copy or migrate all recordings for all users in the organization the admin user belongs to without having to select which recordings to download on the web interface.
 
 Cisco Webex is THE unified app for the future of work, where you can call, meet, collaborate and message. Webex allows you to record meetings if needed and the Webex cloud stores recordings by default up to one year and with a maximum of 10 years. However, some customers are required by law to store recordings for a longer period of time. One solution would be to migrate the recordings to the AWS cloud.
 
@@ -10,15 +10,15 @@ By using the Webex and AWS API, we have created a Flask application that integra
 
 ![IMAGES/0_login.png](IMAGES/0_login.png)
 
-1. After having logged in and authorized the application, we should select the `siteUrl`, the `period` and the `hostEmail` that we are interested in:
+1. After having logged in and authorized the application, we should select the `siteUrl`, the `period` and the `hostEmail` that we are interested in. You can select `All Users` if you wish to list recordings for all users for the time period selected, but if you have more than a few dozen users in your organization you might want to consider using the "bulk" option of this sample code described below instead so that you do not have to scroll through hundreds of thousands of items on the web interface.
 
 ![IMAGES/1_select_period.png](IMAGES/1_select_period.png)
 
-2. Then, we will obtain a table of all the recordings that are available and it will be immediately indicated if the Webex recording has been migrated to the cloud or not:
+2. Then, we will obtain a table of all the recordings that are available and it will be immediately indicated if the Webex recording has been copied or migrated from the Webex cloud or not:
 
 ![IMAGES/2_select_recording.png](IMAGES/2_select_recording.png)
 
-3. When you have selected the recordings that you would like to migrate, you can press the button `Migrate` to start the migration process and afterwards you will get a summary of the recordings that have migrated:
+3. When you have selected the recordings that you would like to migrate, you can press the button `Migrate` (`Copy` if you have set the environment variables to no migrate) to start the copy or migration process and afterwards you will get a summary of the recordings that have been processed:
 
 ![IMAGES/3_migrate.png](IMAGES/3_migrate.png)
 
@@ -28,9 +28,15 @@ By using the Webex and AWS API, we have created a Flask application that integra
 
 Please note: the scheduler's back-end has not been fully implemented. The front-end serves as a mock-up and inspiration on how to do an automated flow of this use case.
 
+5. If you use the "bulk" option by using the URL for the Flask application and appending "/bulk", you will obtain the same admin login page but then you will be presented with the following page where you will
+   only be able to select the `siteUrl` and the `period`. After that, if you click on the "Retrieve All" button, all recordings for all users for that period will be copied to migrated from the Webex cloud to AWS or local storage depending on how you set up the corresponding environment variables:
+
+![IMAGES/1a_bulk.png](IMAGES/1a_bulk.png)
+
 ## Contacts
 
 - Simon Fang (sifang@cisco.com)
+- Gerardo Chaves (gchaves@cisco.com)
 
 ## Solution Components
 
@@ -42,7 +48,7 @@ Please note: the scheduler's back-end has not been fully implemented. The front-
 ## Prerequisites
 
 - Webex OAuth Integration
-- AWS S3 Storage
+- AWS S3 Storage (for cloud storage instead of local filesystem)
 - Webex Account
 
 ## How to register your own Webex OAuth integration
@@ -92,9 +98,9 @@ Registering an integration with Webex is easy and can be done in a couple of ste
 
 > Note: the documentation for Webex integrations can be found [here](https://developer.webex.com/docs/integrations)
 
-## AWS S3 Storage
+## AWS S3 Storage (Optional)
 
-Next, we have to create AWS S3 storage, where we are going to migrate the Webex recordings to. In case you have already set up S3 storage and obtained the API credentials, then you can skip this step.
+Next, we can create AWS S3 storage, if you wish to migrate or copy the Webex recordings to. In case you have already set up S3 storage and obtained the API credentials, then you can skip this step.
 
 1. Sign in to the AWS Management Console and open the Amazon S3 console at https://console.aws.amazon.com/s3/.
 
@@ -201,7 +207,22 @@ Now it is time to launch the application! Simply type in the following command i
 
     $ python app.py
 
-Then, head over to the URL that is displayed in the terminal output.
+Then, head over to the URL that is displayed in the terminal output. For example:
+
+```
+http://127.0.0.1:5500/
+```
+
+The downloaded or migrated recordings obtained using this URL will use filenames with the format `{meeting topic}---{recording id}.mp4`
+
+If you wish to bulk download recordings for all users for a selected time period, you need to append `bulk` to the url to bring up the corresponding web interface for bulk operations.  
+For example:
+
+```
+http://127.0.0.1:5500/bulk
+```
+
+The downloaded or migrated recordings obtained using this "bulk" URL will use filenames with the format `{host Name}-{time recorded}---{recording id}.mp4`
 
 Please note: If running on MacOS, if you get the following error in the console where you are running the flask application:
 

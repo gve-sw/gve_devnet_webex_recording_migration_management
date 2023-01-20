@@ -23,7 +23,7 @@ import urllib
 import glob
 
 
-from flask import Flask, request, redirect, render_template
+from flask import Flask, request, redirect, render_template, session
 from boto3 import resource
 from dotenv import load_dotenv
 import os
@@ -58,6 +58,9 @@ MIGRATE_RECORDINGS = os.getenv("MIGRATE_RECORDINGS")
 # Flask app
 app = Flask(__name__)
 
+app.secret_key = '123456789012345678901234'
+
+
 if (AWS_ACCESS_KEY_ID != ""):
     s3 = resource(
         's3',
@@ -71,6 +74,7 @@ selected_site = ""
 meetings = []
 people = []
 selected_person_id = ""
+
 
 ########################
 ### Helper Functions ###
@@ -162,7 +166,7 @@ def get_stored_recordings():
 
 def are_meetings_in_storage(meetings, stored_recordings):
     for meeting in meetings:
-        # Check if meeting has been migrated to AWS already or not
+        # Check if meeting has been migrated or copied to storage already or not
         if meeting["id"] in stored_recordings:
             meeting["inStorage"] = True
         else:
@@ -180,7 +184,7 @@ def get_people(webex_access_token):
     peopleiterable = api.people.list()
     for person in peopleiterable:
         people.append(json.loads(json.dumps(person.json_data)))
-    print(people)
+    # print(people)
 
     return people
 
@@ -201,6 +205,23 @@ def get_host_email(person_id):
     emails = response.json()["emails"]
     print(f'Got host email: {emails}')
     return emails
+
+
+def get_host_email_name(person_id):
+    # Get people details
+    url = f"{WEBEX_BASE_URL}/people/{person_id}"
+    headers = {
+        "Authorization": f"Bearer {webex_access_token}"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    # print("get host email")
+    # print(response.json())
+    emails = response.json()["emails"]
+    displayName = response.json()["displayName"]
+    print(f'Got host email: {emails}')
+    return emails, displayName
 
 # Delete a specific webex recording based on the recording ID
 
@@ -228,6 +249,16 @@ def get_recording_details(meeting, selected_person_id):
     })
     return response.json()
 
+
+def get_recording_details_host_email(meeting, host_email):
+    # Get recording details
+    url = f"{WEBEX_BASE_URL}/recordings/{meeting}?hostEmail={host_email}"
+    response = requests.get(url, headers={
+        "Authorization": f"Bearer {webex_access_token}"
+    })
+    return response.json()
+
+
 ##############
 ### Routes ###
 ##############
@@ -237,6 +268,14 @@ def get_recording_details(meeting, selected_person_id):
 
 @app.route('/')
 def mainpage():
+    session['bulk'] = False
+    return render_template('mainpage_login.html')
+
+
+# bulk download login
+@app.route('/bulk')
+def bulk_mainpage():
+    session['bulk'] = True
     return render_template('mainpage_login.html')
 
 # scheduler page
@@ -275,11 +314,18 @@ def webexoauth():
     webex_access_token = get_webex_access_token(webex_code)
 
     sites = get_sites()
-    people = get_people(webex_access_token)
-    return render_template('columnpage.html', sites=sites, people=people,
-                           Action="Migrate" if (
-                               MIGRATE_RECORDINGS == "True") else "Copy",
-                           Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
+
+    if session['bulk']:
+        return render_template('bulkpage.html', sites=sites,
+                               Action="Migrate" if (
+                                   MIGRATE_RECORDINGS == "True") else "Copy",
+                               Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
+    else:
+        people = get_people(webex_access_token)
+        return render_template('columnpage.html', sites=sites, people=people,
+                               Action="Migrate" if (
+                                   MIGRATE_RECORDINGS == "True") else "Copy",
+                               Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
 
 # Step 1: select period of recordings
 
@@ -299,31 +345,113 @@ def select_period():
         from_date = form_data['fromdate']
         to_date = form_data['todate']
         selected_site = form_data['site']
-        selected_person_id = form_data['person']
-        print(f'Selected person ID: {selected_person_id}')
-        if selected_person_id != 'all':
-            host_email = get_host_email(selected_person_id)[0]
-            meetings = get_meetings(
-                from_date, to_date, selected_site, host_email)
-        else:
+
+        if session['bulk']:
+
+            # Get recordings in storage
+            stored_recordings = get_stored_recordings()
+            print(f'Stored recordings: {stored_recordings}')
+            app.logger.info(
+                "Retrieving all users for bulk download....")
+            print("Retrieving all users for bulk download...")
+            people = get_people(webex_access_token)
+            app.logger.info(
+                "Retrieving list of recordings for each user....")
+            print("Retrieving list of recordings for each user...")
             for person in people:
                 selected_person_id = person['id']
                 print(f'Listing recordings for: {selected_person_id}')
+                host_details = get_host_email_name(selected_person_id)
+                host_email = host_details[0][0]
+                host_name = host_details[1]
+                user_recordings = get_meetings(from_date,
+                                               to_date, selected_site, host_email)
+                recordings_not_stored = []
+                for user_rec in user_recordings:
+                    if user_rec["id"] not in stored_recordings:
+                        user_rec["host_email"] = host_email
+                        user_rec["host_name"] = host_name
+                        recordings_not_stored.append(user_rec)
+                meetings += recordings_not_stored
+
+            app.logger.info(
+                "Successfully retrieved the list of recordings not already stored for bulk processing")
+            print(
+                "Successfully retrieved the list of recordings not already stored for bulk processing")
+
+            failed_migrations = []
+            migrated_meetings = []
+            for meeting in meetings:
+                meeting_id = meeting["id"]
+                try:
+                    recording_details = get_recording_details_host_email(
+                        meeting["id"], meeting["host_email"])
+
+                    # Download recording mp4 in memory
+                    downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
+                    topic = recording_details['topic']
+                    timerecorded = recording_details['timeRecorded']
+                    hostName = meeting["host_name"]
+                    filename = f'{hostName}-{timerecorded}---{meeting_id}.mp4'
+                    downloaded_file = urllib.request.urlopen(downloadlink)
+                    app.logger.info(
+                        f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
+                    print(
+                        f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
+                    if (AWS_ACCESS_KEY_ID != ""):
+                        # We downloaded the file in memory and pass that on to S3 immediately
+                        s3.Bucket(BUCKET_NAME).put_object(
+                            Key=filename, Body=downloaded_file.read())
+                        migrated_meetings.append(
+                            {"id": meeting_id, "filename": filename})
+                    elif (DOWNLOAD_FOLDER != ""):
+                        downloaded_file = urllib.request.urlopen(downloadlink)
+                        save_as = DOWNLOAD_FOLDER + filename
+                        content = downloaded_file.read()
+                        # Save to file
+                        with open(save_as, 'wb') as download:
+                            download.write(content)
+                        migrated_meetings.append(
+                            {"id": meeting_id, "filename": filename})
+
+                except:
+                    app.logger.exception(
+                        f"Failed copying of recording with meeting id {meeting_id}")
+                    failed_migrations.append(
+                        {"id": meeting_id, "filename": filename})
+
+            recordings_summary = f"Copied: {migrated_meetings}  Failed: {failed_migrations}"
+
+            return render_template('bulkpage.html', sites=sites, selected_site=selected_site, recordings_summary=recordings_summary)
+        else:
+            selected_person_id = form_data['person']
+            print(f'Selected person ID: {selected_person_id}')
+            if selected_person_id != 'all':
                 host_email = get_host_email(selected_person_id)[0]
-                meetings += get_meetings(from_date,
-                                         to_date, selected_site, host_email)
+                meetings = get_meetings(
+                    from_date, to_date, selected_site, host_email)
+            else:
+                for person in people:
+                    selected_person_id = person['id']
+                    print(f'Listing recordings for: {selected_person_id}')
+                    host_email = get_host_email(selected_person_id)[0]
+                    meetings += get_meetings(from_date,
+                                             to_date, selected_site, host_email)
 
-        app.logger.info("Successfully retrieved the list of recordings")
-        print("Successfully retrieved the list of recordings")
-        # Get recordings in storage
-        stored_recordings = get_stored_recordings()
+            app.logger.info("Successfully retrieved the list of recordings")
+            print("Successfully retrieved the list of recordings")
+            # Get recordings in storage
+            stored_recordings = get_stored_recordings()
 
-        meetings = are_meetings_in_storage(meetings, stored_recordings)
-        return render_template('columnpage.html', sites=sites, selected_site=selected_site, meetings=meetings, people=people, selected_person_id=selected_person_id,
-                               Action="Migrate" if (
-                                   MIGRATE_RECORDINGS == "True") else "Copy",
-                               Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
-    return render_template('columnpage.html')
+            meetings = are_meetings_in_storage(meetings, stored_recordings)
+            return render_template('columnpage.html', sites=sites, selected_site=selected_site, meetings=meetings, people=people, selected_person_id=selected_person_id,
+                                   Action="Migrate" if (
+                                       MIGRATE_RECORDINGS == "True") else "Copy",
+                                   Destination="AWS" if (AWS_ACCESS_KEY_ID != "") else "Local")
+    if session['bulk']:
+        return render_template('bulkpage.html')
+    else:
+        return render_template('columnpage.html')
 
 # Step 2: Select recordings to migrate from Webex to AWS
 
@@ -376,7 +504,7 @@ def select_recordings():
                         f"Failed copying of recording with meeting id {meeting}")
                     failed_migration_IDs.append(meeting)
 
-        # Get recordings in AWS
+        # Get recordings in storage
         stored_recordings = get_stored_recordings()
 
         meetings = are_meetings_in_storage(meetings, stored_recordings)
