@@ -1,6 +1,6 @@
 # GVE DevNet Webex Recording Migration Management
 
-Please note: this repository is an adaptation of the [Webex Recordings to AWS App](https://github.com/gve-sw/gve_devnet_webex_recordings_to_aws). We have extended the code for the admin user, so the admin user can migrate or copy all the recordings to a cloud storage solution or local storage. We have also implemented a "bulk" mode to be able to copy or migrate all recordings for all users in the organization the admin user belongs to without having to select which recordings to download on the web interface.
+Please note: this repository is an adaptation of the [Webex Recordings to AWS App](https://github.com/gve-sw/gve_devnet_webex_recordings_to_aws). We have also implemented a "bulk" mode to be able to copy or migrate all recordings for all users in the organization the admin user belongs to.
 
 Cisco Webex is THE unified app for the future of work, where you can call, meet, collaborate and message. Webex allows you to record meetings if needed and the Webex cloud stores recordings by default up to one year and with a maximum of 10 years. However, some customers are required by law to store recordings for a longer period of time. One solution would be to migrate the recordings to the AWS cloud.
 
@@ -10,7 +10,7 @@ By using the Webex and AWS API, we have created a Flask application that integra
 
 ![IMAGES/0_login.png](IMAGES/0_login.png)
 
-1. After having logged in and authorized the application, we should select the `siteUrl`, the `period` and the `hostEmail` that we are interested in. You can select `All Users` if you wish to list recordings for all users for the time period selected, but if you have more than a few dozen users in your organization you might want to consider using the "bulk" option of this sample code described below instead so that you do not have to scroll through hundreds of thousands of items on the web interface.
+1. After having logged in and authorized the application, we should select the `siteUrl`, the `period` and the `hostEmail` that we are interested in.
 
 ![IMAGES/1_select_period.png](IMAGES/1_select_period.png)
 
@@ -194,12 +194,18 @@ The following commands are executed in the terminal.
 
     # Flag to indicate if it should delete after copying to perform a true migration
     MIGRATE_RECORDINGS = "True"
+
+    # String to use as filter when pulling entire directory for bulk mode. Only users with names that start with that string
+    # will be processed. Minimum 3 characters
+    BULK_NAME_FILTER = ""
     ```
 
 If you wish to use a local filesystem or local network location to download the Webex Meetings recordings,
 leave the `AWS_ACCESS_KEY_ID` environment variable blank and fill out `DOWNLOAD_FOLDER` environment variable with the path to the local directory to use.  
 Also, if you do not wish to delete the recordings from the Webex cloud and therefore "copy" instead of "migrate" those recordings, please set the
 MIGRATE_RECORDINGS environment variable to "False".
+
+If you wish to use the "bulk" mode described below and have a very large organization with hundreds or thousands of users, you can fill out the `BULK_NAME_FILTER` environment variable with at least the first 3 letters of the name of the users you are interested in procesing for either testing purposes or targeting a specific user to download all of their recordings without having to select them all from the web interface. Leave it blank to always process the entire list of users.
 
 ## Usage
 

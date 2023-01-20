@@ -98,7 +98,6 @@
                                                 <div class="form-group__text select">
                                                         <select name="person" id='person' required>
                                                             <option disabled selected hidden value="0">Please choose...</option>
-                                                            <option value="all">All Users</option>
                                                             {% for person in people %}<option value="{{person.id}}" {% if selected_person_id == person.id %} selected {% endif %}>{{person.firstName}} {{person.lastName}} ({{person.emails[0]}})</option>{% endfor %}
                                                         </select>
                                                     <label for="person">Person</label>

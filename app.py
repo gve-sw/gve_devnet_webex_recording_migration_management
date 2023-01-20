@@ -21,6 +21,7 @@ __license__ = "Cisco Sample Code License, Version 1.1"
 import requests
 import urllib
 import glob
+import time
 
 
 from flask import Flask, request, redirect, render_template, session
@@ -54,6 +55,8 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 DOWNLOAD_FOLDER = os.getenv("DOWNLOAD_FOLDER")
 MIGRATE_RECORDINGS = os.getenv("MIGRATE_RECORDINGS")
+
+BULK_NAME_FILTER = os.getenv("BULK_NAME_FILTER")
 
 # Flask app
 app = Flask(__name__)
@@ -120,14 +123,17 @@ def get_sites():
 
 def get_meetings(from_date, to_date, selected_site, host_email):
     # Get recordings
-    url = f"{WEBEX_BASE_URL}/recordings?from={from_date}T00%3A00%3A00&to={to_date}T23%3A59%3A59&siteUrl={selected_site}&hostEmail={host_email}"
+    url = f"{WEBEX_BASE_URL}/recordings?max=100&from={from_date}T00%3A00%3A00&to={to_date}T23%3A59%3A59&siteUrl={selected_site}&hostEmail={host_email}"
     headers = {
         "Authorization": f"Bearer {webex_access_token}"
     }
-
+    time.sleep(1)
     response = requests.get(url, headers=headers)
     if (response.status_code == 401):
         print('Unauthorized!')
+        return []
+    elif (response.status_code == 502 or response.status_code == 503):
+        print('Services unavailable, skipping!')
         return []
     else:
         response.raise_for_status()
@@ -181,7 +187,10 @@ def get_people(webex_access_token):
 
     api = WebexTeamsAPI(access_token=webex_access_token)
     people = []
-    peopleiterable = api.people.list()
+    if BULK_NAME_FILTER != '' and len(BULK_NAME_FILTER) >= 3:
+        peopleiterable = api.people.list(displayName=BULK_NAME_FILTER)
+    else:
+        peopleiterable = api.people.list()
     for person in peopleiterable:
         people.append(json.loads(json.dumps(person.json_data)))
     # print(people)
@@ -275,7 +284,15 @@ def mainpage():
 # bulk download login
 @app.route('/bulk')
 def bulk_mainpage():
+    global meetings
+    global people
+
     session['bulk'] = True
+
+    # clearing out globals in case they just ran the regular version of the tool
+    meetings = []
+    people = []
+
     return render_template('mainpage_login.html')
 
 # scheduler page
@@ -372,6 +389,9 @@ def select_period():
                         user_rec["host_email"] = host_email
                         user_rec["host_name"] = host_name
                         recordings_not_stored.append(user_rec)
+                    else:
+                        print(
+                            f'Skipping recording ID {user_rec["id"]} for user {host_name} since it is already stored.')
                 meetings += recordings_not_stored
 
             app.logger.info(
@@ -393,6 +413,8 @@ def select_period():
                     timerecorded = recording_details['timeRecorded']
                     hostName = meeting["host_name"]
                     filename = f'{hostName}-{timerecorded}---{meeting_id}.mp4'
+                    filename = filename.replace(':', '_')
+                    filename = filename.replace(',', '_')
                     downloaded_file = urllib.request.urlopen(downloadlink)
                     app.logger.info(
                         f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
@@ -419,24 +441,23 @@ def select_period():
                         f"Failed copying of recording with meeting id {meeting_id}")
                     failed_migrations.append(
                         {"id": meeting_id, "filename": filename})
-
+            print("================== Done! ====================")
+            print("Copied:")
+            print(migrated_meetings)
+            print("Failed:")
+            print(failed_migrations)
             recordings_summary = f"Copied: {migrated_meetings}  Failed: {failed_migrations}"
+
+            meetings = []
+            people = []
 
             return render_template('bulkpage.html', sites=sites, selected_site=selected_site, recordings_summary=recordings_summary)
         else:
             selected_person_id = form_data['person']
             print(f'Selected person ID: {selected_person_id}')
-            if selected_person_id != 'all':
-                host_email = get_host_email(selected_person_id)[0]
-                meetings = get_meetings(
-                    from_date, to_date, selected_site, host_email)
-            else:
-                for person in people:
-                    selected_person_id = person['id']
-                    print(f'Listing recordings for: {selected_person_id}')
-                    host_email = get_host_email(selected_person_id)[0]
-                    meetings += get_meetings(from_date,
-                                             to_date, selected_site, host_email)
+            host_email = get_host_email(selected_person_id)[0]
+            meetings = get_meetings(
+                from_date, to_date, selected_site, host_email)
 
             app.logger.info("Successfully retrieved the list of recordings")
             print("Successfully retrieved the list of recordings")
