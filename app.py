@@ -124,20 +124,30 @@ def get_sites():
 def get_meetings(from_date, to_date, selected_site, host_email):
     # Get recordings
     url = f"{WEBEX_BASE_URL}/recordings?max=100&from={from_date}T00%3A00%3A00&to={to_date}T23%3A59%3A59&siteUrl={selected_site}&hostEmail={host_email}"
-    headers = {
-        "Authorization": f"Bearer {webex_access_token}"
-    }
-    time.sleep(1)
-    response = requests.get(url, headers=headers)
-    if (response.status_code == 401):
-        print('Unauthorized!')
-        return []
-    elif (response.status_code == 502 or response.status_code == 503):
-        print('Services unavailable, skipping!')
-        return []
-    else:
-        response.raise_for_status()
-    meetings = response.json()['items']
+    meetings = []
+    while True:
+        headers = {
+            "Authorization": f"Bearer {webex_access_token}"
+        }
+        time.sleep(1)
+        response = requests.get(url, headers=headers)
+        if (response.status_code == 401):
+            print('Unauthorized!')
+            return []
+        elif (response.status_code == 502 or response.status_code == 503):
+            print('Services unavailable, skipping!')
+            return []
+        else:
+            response.raise_for_status()
+        meetings += response.json()['items']
+        if not response.headers.get('link', None):
+            break
+        elif response.headers["link"].split(';')[1].strip() == 'rel="next"':
+            url = response.headers["link"].split(';')[0].strip('<>')
+            print("Paging due to large number of recordings...")
+        else:
+            break
+
     return meetings
 
 # Function to return recordings stored in the AWS S3 bucket or local folder
