@@ -426,12 +426,13 @@ def select_period():
                         if (meeting["serviceType"] != "MeetingCenter"):
                             serviceType = meeting["serviceType"]
                             downloadURL = meeting["downloadUrl"]
+                            recordingPwd = meeting["password"]
                             app.logger.info(
-                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} ")
+                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} pwd: {recordingPwd} ")
                             print(
-                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} ")
+                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} pwd: {recordingPwd} ")
                             failed_migrations.append(
-                                {"id": meeting_id, "filename": filename, "downloadURL": downloadURL})
+                                {"id": meeting_id, "filename": filename, "downloadURL": downloadURL, "pwd": recordingPwd})
                         else:
                             app.logger.info(
                                 f"Recording ID: {meeting_id} does not have any download links! Check PREVENT DOWNLOADING setting. ")
