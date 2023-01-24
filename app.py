@@ -416,41 +416,54 @@ def select_period():
                 try:
                     recording_details = get_recording_details_host_email(
                         meeting["id"], meeting["host_email"])
-
-                    if 'temporaryDirectDownloadLinks' not in recording_details:
-                        app.logger.info(
-                            f"Recording ID: {meeting_id} does not have any download links!")
-                        print(
-                            f"Recording ID: {meeting_id} does not have any download links!")
-
-                    # Download recording mp4 in memory
                     topic = recording_details['topic']
                     timerecorded = recording_details['timeRecorded']
                     hostName = meeting["host_name"]
                     filename = f'{hostName}-{timerecorded}---{meeting_id}.mp4'
                     filename = filename.replace(':', '_')
                     filename = filename.replace(',', '_')
-                    downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
-                    downloaded_file = urllib.request.urlopen(downloadlink)
-                    app.logger.info(
-                        f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
-                    print(
-                        f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
-                    if (AWS_ACCESS_KEY_ID != ""):
-                        # We downloaded the file in memory and pass that on to S3 immediately
-                        s3.Bucket(BUCKET_NAME).put_object(
-                            Key=filename, Body=downloaded_file.read())
-                        migrated_meetings.append(
-                            {"id": meeting_id, "filename": filename})
-                    elif (DOWNLOAD_FOLDER != ""):
+                    if 'temporaryDirectDownloadLinks' not in recording_details:
+                        if (meeting["serviceType"] != "MeetingCenter"):
+                            serviceType = meeting["serviceType"]
+                            downloadURL = meeting["downloadUrl"]
+                            app.logger.info(
+                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} ")
+                            print(
+                                f"Recording ID: {meeting_id} is for {serviceType} recording service. Try manual download with: {downloadURL} ")
+                            failed_migrations.append(
+                                {"id": meeting_id, "filename": filename, "downloadURL": downloadURL})
+                        else:
+                            app.logger.info(
+                                f"Recording ID: {meeting_id} does not have any download links! Check PREVENT DOWNLOADING setting. ")
+                            print(
+                                f"Recording ID: {meeting_id} does not have any download links! Check PREVENT DOWNLOADING setting. ")
+                            failed_migrations.append(
+                                {"id": meeting_id, "filename": filename})
+                    else:
+                        # Download recording mp4 in memory
+
+                        downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
                         downloaded_file = urllib.request.urlopen(downloadlink)
-                        save_as = DOWNLOAD_FOLDER + filename
-                        content = downloaded_file.read()
-                        # Save to file
-                        with open(save_as, 'wb') as download:
-                            download.write(content)
-                        migrated_meetings.append(
-                            {"id": meeting_id, "filename": filename})
+                        app.logger.info(
+                            f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
+                        print(
+                            f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
+                        if (AWS_ACCESS_KEY_ID != ""):
+                            # We downloaded the file in memory and pass that on to S3 immediately
+                            s3.Bucket(BUCKET_NAME).put_object(
+                                Key=filename, Body=downloaded_file.read())
+                            migrated_meetings.append(
+                                {"id": meeting_id, "filename": filename})
+                        elif (DOWNLOAD_FOLDER != ""):
+                            downloaded_file = urllib.request.urlopen(
+                                downloadlink)
+                            save_as = DOWNLOAD_FOLDER + filename
+                            content = downloaded_file.read()
+                            # Save to file
+                            with open(save_as, 'wb') as download:
+                                download.write(content)
+                            migrated_meetings.append(
+                                {"id": meeting_id, "filename": filename})
 
                 except:
                     app.logger.exception(
