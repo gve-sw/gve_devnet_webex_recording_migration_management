@@ -417,14 +417,20 @@ def select_period():
                     recording_details = get_recording_details_host_email(
                         meeting["id"], meeting["host_email"])
 
+                    if 'temporaryDirectDownloadLinks' not in recording_details:
+                        app.logger.info(
+                            f"Recording ID: {meeting_id} does not have any download links!")
+                        print(
+                            f"Recording ID: {meeting_id} does not have any download links!")
+
                     # Download recording mp4 in memory
-                    downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
                     topic = recording_details['topic']
                     timerecorded = recording_details['timeRecorded']
                     hostName = meeting["host_name"]
                     filename = f'{hostName}-{timerecorded}---{meeting_id}.mp4'
                     filename = filename.replace(':', '_')
                     filename = filename.replace(',', '_')
+                    downloadlink = recording_details['temporaryDirectDownloadLinks']['recordingDownloadLink']
                     downloaded_file = urllib.request.urlopen(downloadlink)
                     app.logger.info(
                         f"Attempting bulk download of recording ID: {meeting_id} to filename {filename}")
